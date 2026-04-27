@@ -163,50 +163,26 @@ export default function NewExecutionPage() {
 
     setLoading(true);
     try {
-      const { data: workload, error: workloadError } = await supabase
-        .from("workloads")
-        .insert({
-          workload_name: workloadName,
-          lifecycle_status: "CREATED",
-          total_cumulative_cost: 0,
-          parameters: parsedParameters,
-          industry,
-          config_qubits: configQubits,
-          config_shots: configShots,
-        })
-        .select("id")
-        .single();
-
-      if (workloadError) throw workloadError;
-
-      const { data: job, error: jobError } = await supabase
-        .from("jobs")
-        .insert({
-          workload_id: workload.id,
-          assigned_provider_id: selectedProvider.id,
-          estimated_cost: estimatedCost,
-          actual_cost: 0,
-          status: "QUEUED",
-          tier,
-        })
-        .select("id, tier")
-        .single();
-
-      if (jobError) throw jobError;
-
-      const webhookUrl =
-        process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL ?? "http://135.181.86.147/webhook/run-analysis";
-
-      const webhookResp = await fetch(webhookUrl, {
+      const launchResp = await fetch("/api/execution/launch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ job_id: job.id, tier: job.tier, parameters: parsedParameters }),
+        body: JSON.stringify({
+          workload_name: workloadName,
+          industry,
+          tier,
+          assigned_provider_id: selectedProvider.id,
+          config_qubits: configQubits,
+          config_shots: configShots,
+          parameters: parsedParameters,
+          organization_id: organization.id,
+        }),
       });
 
-      if (!webhookResp.ok) toast.warning("Job creado, pero n8n devolvió error. Revisa el webhook.");
+      const launchData = await launchResp.json();
+      if (!launchResp.ok) throw new Error(launchData?.error ?? "No se pudo lanzar la ejecución.");
 
       toast.success("Ejecución lanzada correctamente.");
-      router.push(`/execution/${job.id}`);
+      router.push(`/execution/${launchData.job_id}`);
       router.refresh();
     } catch (error: any) {
       toast.error(error?.message ?? "No se pudo lanzar la ejecución.");

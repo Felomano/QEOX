@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ArrowLeft, Atom, Loader2, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
@@ -39,9 +39,10 @@ type JobLog = {
   created_at: string;
 };
 
-export default function ExecutionDetails({ params }: { params: { id: string } }) {
+export default function ExecutionDetails({ params }: { params: { id?: string } | Promise<{ id?: string }> }) {
   const supabase = createClient();
   const router = useRouter();
+  const routeParams = useParams<{ id?: string | string[] }>();
 
   const [loading, setLoading] = useState(true);
   const [rerunning, setRerunning] = useState(false);

@@ -39,12 +39,6 @@ const DEFAULT_PARAMETERS = {
   retries: 0,
 };
 
-const isValidUuid = (value: unknown): value is string => {
-  if (typeof value !== "string") return false;
-  if (!value || value === "undefined") return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-};
-
 export default function NewExecutionPage() {
   const supabase = createClient();
   const router = useRouter();
@@ -187,13 +181,8 @@ export default function NewExecutionPage() {
       const launchData = await launchResp.json();
       if (!launchResp.ok) throw new Error(launchData?.error ?? "No se pudo lanzar la ejecución.");
 
-      const returnedJobId = launchData?.jobId ?? launchData?.job_id;
-      if (!isValidUuid(returnedJobId)) {
-        throw new Error("El backend no devolvió un jobId válido para redirección.");
-      }
-
       toast.success("Ejecución lanzada correctamente.");
-      router.push(`/execution/${returnedJobId}`);
+      router.push(`/execution/${launchData.job_id}`);
       router.refresh();
     } catch (error: any) {
       toast.error(error?.message ?? "No se pudo lanzar la ejecución.");

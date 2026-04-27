@@ -9,23 +9,16 @@ import { toast } from "sonner";
 
 type ExecutionTier = "classic" | "hybrid" | "quantum";
 
-type ProviderRef = {
-  id: string;
-  provider_name: string | null;
-  tier?: string | null;
-};
-
 type Job = {
   id: string;
   workload_id: string;
-  assigned_provider_id: string | null;
+  assigned_provider_id: string;
   actual_cost: number;
   estimated_cost: number;
   status: string;
   tier: ExecutionTier;
   execution_time_seconds: number | null;
   created_at?: string;
-  providers?: ProviderRef | null;
 };
 
 type Workload = {
@@ -46,12 +39,6 @@ type JobLog = {
   created_at: string;
 };
 
-const isValidUuid = (value: unknown): value is string => {
-  if (typeof value !== "string") return false;
-  if (!value || value === "undefined") return false;
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-};
-
 export default function ExecutionDetails({ params }: { params: { id?: string } | Promise<{ id?: string }> }) {
   const supabase = createClient();
   const router = useRouter();
@@ -64,55 +51,23 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
   const [logs, setLogs] = useState<JobLog[]>([]);
   const [attempts, setAttempts] = useState<Job[]>([]);
   const [finalizationApplied, setFinalizationApplied] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [paramError, setParamError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    const resolveId = async () => {
-      const resolvedParams = await Promise.resolve(params);
-      const routeId = Array.isArray(routeParams?.id) ? routeParams.id[0] : routeParams?.id;
-      const resolvedId = routeId ?? resolvedParams?.id;
-
-      if (!active) return;
-
-      if (!isValidUuid(resolvedId)) {
-        setParamError("ID de ejecución inválido o no disponible.");
-        setJobId(null);
-        setLoading(false);
-        return;
-      }
-
-      setParamError(null);
-      setJobId(resolvedId);
-    };
-
-    resolveId();
-
-    return () => {
-      active = false;
-    };
-  }, [params, routeParams?.id]);
 
   const loadAttempts = async (workloadId: string) => {
     const { data } = await supabase
       .from("jobs")
-      .select("id, workload_id, assigned_provider_id, actual_cost, estimated_cost, status, tier, execution_time_seconds, created_at, providers!assigned_provider_id(id, provider_name, tier)")
+      .select("id, workload_id, assigned_provider_id, actual_cost, estimated_cost, status, tier, execution_time_seconds, created_at")
       .eq("workload_id", workloadId)
       .order("created_at", { ascending: false });
     setAttempts((data as Job[]) ?? []);
   };
 
   const loadAll = useCallback(async () => {
-    if (!isValidUuid(jobId)) return;
-
     setLoading(true);
 
     const { data: jobData, error: jobError } = await supabase
       .from("jobs")
-      .select("id, workload_id, assigned_provider_id, actual_cost, estimated_cost, status, tier, execution_time_seconds, created_at, providers!assigned_provider_id(id, provider_name, tier)")
-      .eq("id", jobId)
+      .select("id, workload_id, assigned_provider_id, actual_cost, estimated_cost, status, tier, execution_time_seconds, created_at")
+      .eq("id", params.id)
       .single();
 
     if (jobError || !jobData) {
@@ -131,7 +86,7 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
       supabase
         .from("jobs_logs")
         .select("id, job_id, event, message, severity, created_at")
-        .eq("job_id", jobId)
+        .eq("job_id", params.id)
         .order("created_at", { ascending: true }),
     ]);
 
@@ -139,12 +94,11 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
     setLogs((logsData as JobLog[]) ?? []);
     await loadAttempts(jobData.workload_id);
     setLoading(false);
-  }, [jobId, supabase]);
+  }, [params.id, supabase]);
 
   useEffect(() => {
-    if (!isValidUuid(jobId)) return;
     loadAll();
-  }, [jobId, loadAll]);
+  }, [loadAll]);
 
   const applyOrganizationSpend = useCallback(
     async (actualCost: number) => {
@@ -210,10 +164,6 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
 
   const handleRerun = async () => {
     if (!job || !workload) return;
-    if (!job.assigned_provider_id) {
-      toast.error("Este job aún no tiene provider asignado. Intenta nuevamente cuando n8n lo asigne.");
-      return;
-    }
 
     setRerunning(true);
     try {
@@ -278,16 +228,7 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
   }, [job]);
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0B3FA8] text-white flex items-center justify-center gap-3">
-        <Loader2 className="animate-spin" />
-        <span className="text-sm">Cargando ejecución...</span>
-      </div>
-    );
-  }
-
-  if (paramError) {
-    return <div className="min-h-screen bg-[#0B3FA8] text-white p-10">{paramError}</div>;
+    return <div className="min-h-screen bg-[#0B3FA8] text-white flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
   }
 
   if (!job) {
@@ -329,7 +270,7 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
             <section className="rounded-lg border border-blue-100/20 bg-[#111f3e] p-4">
               <h3 className="text-2xl font-semibold text-blue-300 border-b border-blue-200/20 pb-2 mb-3">Execution Details</h3>
               <ul className="space-y-2 text-sm">
-                <li>• Provider: {job.providers?.provider_name ?? job.assigned_provider_id ?? "Pendiente de asignación"}</li>
+                <li>• Provider ID: {job.assigned_provider_id}</li>
                 <li>• Execution Type: {job.tier}</li>
                 <li>• Estimated Cost: ${Number(job.estimated_cost ?? 0).toFixed(2)}</li>
                 <li>• Actual Cost: ${Number(job.actual_cost ?? 0).toFixed(2)}</li>
@@ -367,7 +308,7 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
                     <tr key={log.id} className="border-t border-blue-200/10">
                       <td className="px-4 py-2">{new Date(log.created_at).toLocaleTimeString()}</td>
                       <td className="px-4 py-2">{log.event}</td>
-                      <td className="px-4 py-2">{job.providers?.provider_name ?? job.assigned_provider_id ?? "pending"}</td>
+                      <td className="px-4 py-2">{job.assigned_provider_id}</td>
                       <td className={`px-4 py-2 ${log.severity?.toLowerCase() === "error" ? "text-red-300" : "text-slate-100"}`}>{log.message}</td>
                     </tr>
                   ))}
@@ -381,7 +322,7 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
 
           <section className="rounded-lg border border-blue-100/20 bg-[#111f3e] p-4">
             <h3 className="text-2xl font-semibold text-blue-300 border-b border-blue-200/20 pb-2 mb-3">Summary</h3>
-            <p className="text-sm">Final Provider: {job.providers?.provider_name ?? job.assigned_provider_id ?? "Pendiente de asignación"}</p>
+            <p className="text-sm">Final Provider: {job.assigned_provider_id}</p>
             <p className="text-sm">Insight: {job.status === "COMPLETED" ? "Cross-provider optimization successful" : "Execution in progress"}</p>
           </section>
 

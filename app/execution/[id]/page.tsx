@@ -51,36 +51,6 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
   const [logs, setLogs] = useState<JobLog[]>([]);
   const [attempts, setAttempts] = useState<Job[]>([]);
   const [finalizationApplied, setFinalizationApplied] = useState(false);
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [paramError, setParamError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    const resolveId = async () => {
-      const resolvedParams = await Promise.resolve(params);
-      const routeId = Array.isArray(routeParams?.id) ? routeParams.id[0] : routeParams?.id;
-      const resolvedId = routeId ?? resolvedParams?.id;
-
-      if (!active) return;
-
-      if (!resolvedId || resolvedId === "undefined") {
-        setParamError("ID de ejecución inválido o no disponible.");
-        setJobId(null);
-        setLoading(false);
-        return;
-      }
-
-      setParamError(null);
-      setJobId(resolvedId);
-    };
-
-    resolveId();
-
-    return () => {
-      active = false;
-    };
-  }, [params, routeParams?.id]);
 
   const loadAttempts = async (workloadId: string) => {
     const { data } = await supabase
@@ -92,14 +62,12 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
   };
 
   const loadAll = useCallback(async () => {
-    if (!jobId || jobId === "undefined") return;
-
     setLoading(true);
 
     const { data: jobData, error: jobError } = await supabase
       .from("jobs")
       .select("id, workload_id, assigned_provider_id, actual_cost, estimated_cost, status, tier, execution_time_seconds, created_at")
-       .eq("id", jobId)
+      .eq("id", params.id)
       .single();
 
     if (jobError || !jobData) {
@@ -118,7 +86,7 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
       supabase
         .from("jobs_logs")
         .select("id, job_id, event, message, severity, created_at")
-        .eq("job_id", jobId)
+        .eq("job_id", params.id)
         .order("created_at", { ascending: true }),
     ]);
 
@@ -126,12 +94,11 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
     setLogs((logsData as JobLog[]) ?? []);
     await loadAttempts(jobData.workload_id);
     setLoading(false);
-  }, [jobId, supabase]);
+  }, [params.id, supabase]);
 
   useEffect(() => {
-    if (!jobId || jobId === "undefined") return;
     loadAll();
-  }, [jobId, loadAll]);
+  }, [loadAll]);
 
   const applyOrganizationSpend = useCallback(
     async (actualCost: number) => {
@@ -262,10 +229,6 @@ export default function ExecutionDetails({ params }: { params: { id?: string } |
 
   if (loading) {
     return <div className="min-h-screen bg-[#0B3FA8] text-white flex items-center justify-center"><Loader2 className="animate-spin" /></div>;
-  }
-
-  if (paramError) {
-    return <div className="min-h-screen bg-[#0B3FA8] text-white p-10">{paramError}</div>;
   }
 
   if (!job) {

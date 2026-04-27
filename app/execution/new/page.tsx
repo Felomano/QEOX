@@ -1,270 +1,332 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import React, { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { ArrowLeft, Atom, Loader2, Rocket, ShieldAlert } from "lucide-react";
 import { toast } from "sonner";
-import { 
-    Rocket, Server, Loader2, 
-    Activity, Atom, ShieldCheck, Terminal, CheckCircle2 
-} from 'lucide-react';
+import Link from "next/link";
 
-export default function NewWorkloadPage() {
-    const router = useRouter();
-    const supabase = createClient();
-    
-    // Estados de Carga
-    const [loading, setLoading] = useState(false);
-    const [fetchingProviders, setFetchingProviders] = useState(true);
+type ExecutionTier = "classic" | "hybrid" | "quantum";
 
-    // Estados de Datos
-    const [allProviders, setAllProviders] = useState<any[]>([]);
-    const [filteredProviders, setFilteredProviders] = useState<any[]>([]);
-    
-    // Estados del Formulario
-    const [tier, setTier] = useState<'classic' | 'hybrid' | 'quantum'>('hybrid');
-    const [flavor, setFlavor] = useState('');
-    const [workloadName, setWorkloadName] = useState('QUBIT-OPTIMIZER-ALPHA');
-    const [priority, setPriority] = useState<'speed' | 'cost'>('speed');
+type Provider = {
+  id: string;
+  provider_name: string;
+  tier: ExecutionTier;
+  unit_price: number;
+  is_enabled: boolean;
+};
 
-    // 1. CARGA INICIAL DE PROVEEDORES DESDE SUPABASE
-    useEffect(() => {
-        const fetchProviders = async () => {
-            setFetchingProviders(true);
-            try {
-                // Obtenemos todos los proveedores para filtrar localmente por Tier
-                const { data, error } = await supabase
-                    .from('providers')
-                    .select('*');
+type Organization = {
+  id: string;
+  current_spend: number;
+  monthly_budget: number;
+  currency: string;
+};
 
-                if (error) {
-                    console.error("Error al obtener proveedores:", error);
-                    toast.error("Error al conectar con la base de datos");
-                } else {
-                    console.log("Proveedores recuperados:", data);
-                    setAllProviders(data || []);
-                }
-            } catch (err) {
-                console.error("Error crítico en la consulta:", err);
-            } finally {
-                setFetchingProviders(false);
-            }
-        };
-        fetchProviders();
-    }, [supabase]);
+type RecentJob = {
+  id: string;
+  status: string;
+  estimated_cost: number;
+  created_at: string;
+  workloads?: { workload_name: string | null } | null;
+  providers?: { provider_name: string | null } | null;
+};
 
-    // 2. LÓGICA DE FILTRADO DINÁMICO (Corrección de visualización)
-    useEffect(() => {
-        if (allProviders.length > 0) {
-            // Filtramos ignorando mayúsculas y asegurando que estén activos
-            const filtered = allProviders.filter(p => 
-                p.tier?.toLowerCase() === tier.toLowerCase() && 
-                (p.is_active === true || p.is_active === null)
-            );
-            
-            setFilteredProviders(filtered);
-            
-            // Autoseleccionar el primer nodo disponible al cambiar de Tier
-            if (filtered.length > 0) {
-                setFlavor(filtered[0].provider_id);
-            } else {
-                setFlavor('');
-            }
+const DEFAULT_PARAMETERS = {
+  objective: "portfolio_optimization",
+  optimizer: "qaoa",
+  retries: 0,
+};
+
+const isValidUuid = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  if (!value || value === "undefined") return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+};
+
+export default function NewExecutionPage() {
+  const supabase = createClient();
+  const router = useRouter();
+
+  const [loading, setLoading] = useState(false);
+  const [loadingProviders, setLoadingProviders] = useState(true);
+
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [organization, setOrganization] = useState<Organization | null>(null);
+  const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
+
+  const [workloadName, setWorkloadName] = useState("QEOX-HYBRID-OPT-001");
+  const [tier, setTier] = useState<ExecutionTier>("hybrid");
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+  const [industry, setIndustry] = useState("Finance");
+  const [objective, setObjective] = useState("Portfolio Optimization");
+  const [configQubits, setConfigQubits] = useState(24);
+  const [configShots, setConfigShots] = useState(1200);
+  const [parametersText, setParametersText] = useState(JSON.stringify(DEFAULT_PARAMETERS, null, 2));
+
+  const loadRecentJobs = async () => {
+    const { data } = await supabase
+      .from("jobs")
+      .select("id,status,estimated_cost,created_at,workloads(workload_name),providers(provider_name)")
+      .order("created_at", { ascending: false })
+      .limit(6);
+
+    setRecentJobs((data as RecentJob[]) ?? []);
+  };
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      setLoadingProviders(true);
+
+      const [{ data: providerRows, error: providersError }, { data: authData, error: userError }] =
+        await Promise.all([
+          supabase
+            .from("providers")
+            .select("id, provider_name, tier, unit_price, is_enabled")
+            .eq("is_enabled", true),
+          supabase.auth.getUser(),
+        ]);
+
+      if (providersError) {
+        toast.error(`No se pudieron cargar proveedores: ${providersError.message}`);
+      } else {
+        setProviders((providerRows ?? []) as Provider[]);
+      }
+
+      if (!userError && authData.user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("org_id")
+          .eq("id", authData.user.id)
+          .single();
+
+        if (profile?.org_id) {
+          const { data: orgRow, error: orgError } = await supabase
+            .from("organizations")
+            .select("id, current_spend, monthly_budget, currency")
+            .eq("id", profile.org_id)
+            .single();
+
+          if (orgError) {
+            toast.error(`No se pudo cargar la organización: ${orgError.message}`);
+          } else {
+            setOrganization(orgRow as Organization);
+          }
         }
-    }, [tier, allProviders]);
+      }
 
-    // 3. FUNCIÓN PARA LANZAR EL JOB (Corrección de funcionalidad)
-    const handleLaunch = async () => {
-        if (!workloadName) return toast.error("Asigne un nombre al proyecto");
-        if (!flavor) return toast.error("Seleccione un nodo de procesamiento");
-        
-        setLoading(true);
-        try {
-            // A. Insertar Workload principal
-            const { data: workload, error: wError } = await supabase
-                .from('workloads')
-                .insert([{ 
-                    workload_name: workloadName, 
-                    problem_type: 'optimization', 
-                    company_name: 'DHL' 
-                }])
-                .select()
-                .single();
-
-            if (wError) throw wError;
-
-            // B. Insertar Job asociado
-            const { data: job, error: jError } = await supabase
-                .from('jobs')
-                .insert([{ 
-                    workload_id: workload.id, 
-                    status: 'orchestrating', 
-                    tier: tier, 
-                    flavor: flavor, 
-                    priority: priority 
-                }])
-                .select()
-                .single();
-
-            if (jError) throw jError;
-
-            // C. Disparar Webhook a n8n de forma asíncrona
-            // No bloqueamos la navegación si el webhook tarda en responder
-            fetch('http://135.181.86.147/webhook/run-analysis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    job_id: job.id, 
-                    workload_id: workload.id,
-                    tier: tier,
-                    flavor: flavor 
-                }),
-            }).catch(e => console.warn("Aviso: El webhook de n8n no respondió, pero el registro fue creado con éxito."));
-
-            toast.success("Orquestación iniciada correctamente");
-            
-            // Redirigir a la pantalla de ejecución
-            router.push(`/execution/${job.id}`);
-            
-        } catch (err: any) {
-            console.error("Error al lanzar el Job:", err);
-            toast.error(err.message || "Error al procesar la solicitud");
-            setLoading(false);
-        }
+      await loadRecentJobs();
+      setLoadingProviders(false);
     };
 
-    return (
-        <div className="min-h-screen bg-[#050507] text-slate-300 p-6 md:p-12 font-sans selection:bg-blue-500/30">
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-10">
-                
-                {/* CONFIGURACIÓN DEL WORKLOAD */}
-                <div className="lg:col-span-7 space-y-10">
-                    
-                    <div className="flex items-center gap-6">
-                        <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-[0_0_50px_rgba(37,99,235,0.4)]">
-                            <Atom className="text-white animate-pulse" size={36} />
-                        </div>
-                        <div>
-                            <h1 className="text-4xl font-black text-white tracking-tighter uppercase italic leading-none">
-                                QEOX <span className="text-blue-500 not-italic">Orchestrator</span>
-                            </h1>
-                            <p className="text-[10px] text-slate-500 mt-2 uppercase tracking-[0.3em] font-mono">Plano de Control de Infraestructura</p>
-                        </div>
-                    </div>
+    bootstrap();
+  }, [supabase]);
 
-                    {/* Nombre del Proyecto */}
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-[2rem] p-8">
-                        <label className="text-[11px] font-mono text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-4">
-                            <Terminal size={14} className="text-blue-500" /> Identificador del Workload
-                        </label>
-                        <input 
-                            className="w-full bg-black/40 border border-white/10 p-5 rounded-2xl text-blue-400 focus:border-blue-500 outline-none transition-all font-mono"
-                            value={workloadName}
-                            onChange={(e) => setWorkloadName(e.target.value)}
-                        />
-                    </div>
+  const filteredProviders = useMemo(
+    () => providers.filter((p) => p.tier?.toLowerCase() === tier),
+    [providers, tier]
+  );
 
-                    {/* Selector de Tier */}
-                    <div className="space-y-4">
-                        <p className="text-[11px] font-mono text-slate-500 uppercase tracking-widest px-2">Nivel de Computación (Tier)</p>
-                        <div className="grid grid-cols-3 gap-4">
-                            {['classic', 'hybrid', 'quantum'].map((t) => (
-                                <button
-                                    key={t}
-                                    onClick={() => setTier(t as any)}
-                                    className={`p-6 border rounded-[2rem] transition-all ${
-                                        tier === t 
-                                            ? 'border-blue-500 bg-blue-500/10 text-white' 
-                                            : 'border-white/5 bg-white/[0.02] text-slate-500 hover:bg-white/[0.05]'
-                                    }`}
-                                >
-                                    <span className="text-[10px] font-black uppercase tracking-[0.2em]">{t}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+  useEffect(() => {
+    if (!filteredProviders.length) {
+      setSelectedProviderId("");
+      return;
+    }
+    setSelectedProviderId((prev) => prev || filteredProviders[0].id);
+  }, [filteredProviders]);
 
-                    {/* Tabla de Nodos Filtrados */}
-                    <div className="space-y-4">
-                        <div className="flex justify-between items-center px-2">
-                            <span className="text-[11px] font-mono text-slate-500 uppercase tracking-widest">Nodos Disponibles</span>
-                            {fetchingProviders && <Loader2 className="animate-spin text-blue-500" size={14} />}
-                        </div>
-                        <div className="grid gap-3">
-                            {filteredProviders.length > 0 ? (
-                                filteredProviders.map((p) => (
-                                    <div 
-                                        key={p.id}
-                                        onClick={() => setFlavor(p.provider_id)}
-                                        className={`p-6 border rounded-[1.5rem] flex items-center justify-between cursor-pointer transition-all ${
-                                            flavor === p.provider_id 
-                                                ? 'border-blue-500 bg-blue-500/5' 
-                                                : 'border-white/5 bg-white/[0.01] hover:border-white/10'
-                                        }`}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${flavor === p.provider_id ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-600'}`}>
-                                                <Server size={24} />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-white uppercase text-sm tracking-tight">{p.name}</h4>
-                                                <p className="text-[10px] text-slate-500 font-mono italic uppercase">{p.region || 'Despliegue Global'}</p>
-                                            </div>
-                                        </div>
-                                        {flavor === p.provider_id && <CheckCircle2 size={20} className="text-blue-500" />}
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="p-12 border border-dashed border-white/5 rounded-[2rem] text-center text-slate-600 text-xs font-mono uppercase tracking-widest">
-                                    No se encontraron nodos {tier} activos en el registro
-                                </div>
-                            )}
-                        </div>
-                    </div>
-                </div>
+  const selectedProvider = useMemo(
+    () => filteredProviders.find((p) => p.id === selectedProviderId),
+    [filteredProviders, selectedProviderId]
+  );
 
-                {/* RESUMEN Y LANZAMIENTO */}
-                <div className="lg:col-span-5">
-                    <div className="bg-[#0f0f12] border border-white/5 rounded-[3rem] p-10 space-y-10 sticky top-12">
-                        
-                        <div className="space-y-6">
-                            <div className="flex justify-between text-[11px] font-mono text-slate-500 uppercase">
-                                <span>Estrategia del Optimizador</span>
-                                <span className="text-blue-500">{priority}</span>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <button onClick={() => setPriority('speed')} className={`py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${priority === 'speed' ? 'bg-blue-600 text-white' : 'bg-white/5 text-slate-600'}`}>Velocidad</button>
-                                <button onClick={() => setPriority('cost')} className={`py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${priority === 'cost' ? 'bg-emerald-600 text-white' : 'bg-white/5 text-slate-600'}`}>Costo</button>
-                            </div>
-                        </div>
+  const estimatedCost = useMemo(() => {
+    if (!selectedProvider) return 0;
+    return Number(selectedProvider.unit_price) * Number(configShots);
+  }, [selectedProvider, configShots]);
 
-                        <div className="pt-6 border-t border-white/5">
-                            <p className="text-[10px] uppercase text-slate-500 font-bold mb-2">Costo Estimado de Ejecución</p>
-                            <h2 className="text-6xl font-black text-white italic tracking-tighter">
-                                {priority === 'speed' ? '$1.50' : '$0.45'}
-                            </h2>
-                        </div>
+  const handleLaunch = async () => {
+    if (!workloadName.trim()) return toast.error("El workload_name es obligatorio.");
+    if (!selectedProvider) return toast.error("Selecciona un proveedor activo.");
+    if (!organization) return toast.error("No se pudo resolver la organización del usuario.");
 
-                        <button 
-                            onClick={handleLaunch}
-                            disabled={loading || fetchingProviders || !flavor}
-                            className={`w-full py-8 rounded-[2rem] font-black uppercase text-xs tracking-[0.4em] flex items-center justify-center gap-4 transition-all ${
-                                flavor && !loading ? 'bg-blue-600 text-white shadow-xl hover:scale-[1.02] active:scale-[0.98]' : 'bg-white/5 text-slate-700 cursor-not-allowed'
-                            }`}
-                        >
-                            {loading ? <Loader2 className="animate-spin" /> : <Rocket size={20} />}
-                            {loading ? "Orquestando..." : "Lanzar Job"}
-                        </button>
+    let parsedParameters: Record<string, unknown>;
+    try {
+      parsedParameters = { ...JSON.parse(parametersText), objective };
+    } catch {
+      return toast.error("El campo parameters debe ser JSON válido.");
+    }
 
-                        <div className="flex items-center gap-3 p-4 bg-blue-500/5 border border-blue-500/10 rounded-2xl">
-                            <ShieldCheck className="text-blue-500" size={18} />
-                            <p className="text-[9px] uppercase font-bold text-blue-400 leading-tight">
-                                Protegiendo puente cuántico-clásico mediante protocolos automatizados n8n.
-                            </p>
-                        </div>
-                    </div>
-                </div>
+    const projectedSpend = Number(organization.current_spend) + estimatedCost;
+    if (projectedSpend > Number(organization.monthly_budget)) {
+      return toast.error(
+        `Presupuesto excedido. Proyección: ${projectedSpend.toFixed(2)} ${organization.currency} / Límite: ${Number(
+          organization.monthly_budget
+        ).toFixed(2)} ${organization.currency}`
+      );
+    }
+
+    setLoading(true);
+    try {
+      const launchResp = await fetch("/api/execution/launch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workload_name: workloadName,
+          industry,
+          tier,
+          assigned_provider_id: selectedProvider.id,
+          config_qubits: configQubits,
+          config_shots: configShots,
+          parameters: parsedParameters,
+          organization_id: organization.id,
+        }),
+      });
+
+      const launchData = await launchResp.json();
+      if (!launchResp.ok) throw new Error(launchData?.error ?? "No se pudo lanzar la ejecución.");
+
+      const returnedJobId = launchData?.jobId ?? launchData?.job_id;
+      if (!isValidUuid(returnedJobId)) {
+        throw new Error("El backend no devolvió un jobId válido para redirección.");
+      }
+
+      toast.success("Ejecución lanzada correctamente.");
+      router.push(`/execution/${returnedJobId}`);
+      router.refresh();
+    } catch (error: any) {
+      toast.error(error?.message ?? "No se pudo lanzar la ejecución.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-[#0B3FA8] via-[#10367d] to-[#1e40af] p-6 md:p-10 text-slate-100">
+      <div className="max-w-6xl mx-auto rounded-2xl border border-blue-300/20 bg-[#0b162f]/80 shadow-2xl overflow-hidden backdrop-blur-md">
+        <header className="h-20 px-8 flex items-center justify-between border-b border-blue-300/20 bg-[#1147aa]">
+          <div className="flex items-center gap-3">
+            <Atom className="text-blue-100" />
+            <h1 className="text-3xl font-semibold tracking-tight">Compute Intelligence Platform</h1>
+          </div>
+          <Link href="/execution" className="inline-flex items-center gap-2 text-blue-100 hover:text-white text-xs uppercase tracking-wider">
+            <ArrowLeft size={14} /> Back
+          </Link>
+        </header>
+
+        <div className="p-6 md:p-8 space-y-6 bg-[#0f1f3f]/90">
+          <div className="border-b border-blue-200/20 pb-3 text-sm text-blue-100 flex gap-6">
+            <span className="font-semibold border-b-2 border-blue-400 pb-2">Create Job</span>
+            <span className="text-blue-200/70">Job History</span>
+          </div>
+
+          <section className="rounded-xl border border-blue-100/20 bg-[#111f3e] p-6 space-y-5">
+            <h2 className="text-3xl font-semibold text-blue-300">Create Job</h2>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <Field label="Industry">
+                <input value={industry} onChange={(e) => setIndustry(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+              </Field>
+              <Field label="Objective">
+                <input value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+              </Field>
+              <Field label="Workload Name">
+                <input value={workloadName} onChange={(e) => setWorkloadName(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+              </Field>
             </div>
+
+            <div className="grid md:grid-cols-3 gap-4">
+              <Field label="Execution Type">
+                <select value={tier} onChange={(e) => setTier(e.target.value as ExecutionTier)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50">
+                  <option value="classic">Classic</option>
+                  <option value="hybrid">Hybrid</option>
+                  <option value="quantum">Quantum</option>
+                </select>
+              </Field>
+              <Field label="Compute Optimization">
+                <select
+                  value={selectedProviderId}
+                  onChange={(e) => setSelectedProviderId(e.target.value)}
+                  disabled={loadingProviders || !filteredProviders.length}
+                  className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                >
+                  {filteredProviders.map((provider) => (
+                    <option key={provider.id} value={provider.id}>{provider.provider_name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label="Config (Qubits / Shots)">
+                <div className="grid grid-cols-2 gap-2">
+                  <input type="number" value={configQubits} min={1} onChange={(e) => setConfigQubits(Number(e.target.value))} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                  <input type="number" value={configShots} min={1} onChange={(e) => setConfigShots(Number(e.target.value))} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                </div>
+              </Field>
+            </div>
+
+            <Field label="Parameters (JSON)">
+              <textarea rows={4} value={parametersText} onChange={(e) => setParametersText(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-mono text-xs" />
+            </Field>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-blue-100/20 pt-4">
+              <div className="inline-flex items-start gap-2 text-xs text-blue-100 bg-blue-500/20 border border-blue-300/30 rounded-lg px-3 py-2">
+                <ShieldAlert size={15} className="mt-0.5" />
+                <div>
+                  <p>Estimated: {estimatedCost.toFixed(2)} {organization?.currency ?? "USD"}</p>
+                  <p>Budget check: {(Number(organization?.current_spend ?? 0) + estimatedCost).toFixed(2)} / {Number(organization?.monthly_budget ?? 0).toFixed(2)}</p>
+                </div>
+              </div>
+              <button onClick={handleLaunch} disabled={loading || loadingProviders} className="px-8 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold min-w-44 inline-flex items-center justify-center gap-2">
+                {loading ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Create Job
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-xl border border-blue-100/20 bg-[#111f3e] p-6">
+            <h3 className="text-3xl font-semibold text-blue-300 mb-4">Results History</h3>
+            <div className="overflow-auto rounded-lg border border-blue-200/20">
+              <table className="w-full text-sm">
+                <thead className="bg-[#162a52] text-blue-100">
+                  <tr>
+                    <th className="text-left px-4 py-3">Recent Job</th>
+                    <th className="text-left px-4 py-3">Submitted</th>
+                    <th className="text-left px-4 py-3">Provider</th>
+                    <th className="text-left px-4 py-3">Objective</th>
+                    <th className="text-left px-4 py-3">Cost</th>
+                    <th className="text-left px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentJobs.map((row) => (
+                    <tr key={row.id} className="border-t border-blue-200/10">
+                      <td className="px-4 py-3 text-blue-300">{row.id}</td>
+                      <td className="px-4 py-3">{new Date(row.created_at).toLocaleString()}</td>
+                      <td className="px-4 py-3">{row.providers?.provider_name ?? "-"}</td>
+                      <td className="px-4 py-3">{objective}</td>
+                      <td className="px-4 py-3">${Number(row.estimated_cost ?? 0).toFixed(2)}</td>
+                      <td className="px-4 py-3">
+                        <span className="text-[11px] uppercase rounded px-2 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-300/30">{row.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {!recentJobs.length && (
+                    <tr><td className="px-4 py-4 text-slate-300" colSpan={6}>No hay jobs recientes.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </div>
-    );
+      </div>
+    </main>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="space-y-2 block">
+      <span className="text-sm font-medium text-blue-100">{label}</span>
+      {children}
+    </label>
+  );
 }

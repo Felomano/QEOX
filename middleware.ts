@@ -31,14 +31,27 @@ export async function middleware(request: NextRequest) {
     },
   })
 
-  // Refresh session if expired
-  await supabase.auth.getUser()
+  // Refresh session if expired, but do not block the request indefinitely
+  try {
+    await Promise.race([
+      supabase.auth.getUser(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Supabase getUser timeout')), 1500)),
+    ])
+  } catch {
+    // Fail open to avoid middleware invocation timeout in edge runtime
+  }
 
   return supabaseResponse
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    '/home/:path*',
+    '/profile/:path*',
+    '/engine/:path*',
+    '/execution/:path*',
+    '/settings/:path*',
+    '/decide/:path*',
+    '/onboarding/:path*',
   ],
 }

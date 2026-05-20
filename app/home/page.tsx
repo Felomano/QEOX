@@ -84,14 +84,31 @@ export default function DashboardPage() {
 
         <nav className="flex-1 px-4 pb-6 space-y-4 text-sm">
           <NavSection title="Core" items={[{ href: '/home', icon: LayoutDashboard, label: 'Dashboard' }]} />
-          <NavSection title="Workloads" items={[{ href: '/workloads', icon: Briefcase, label: 'All Workloads' }, { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }, { href: [...]
-          <NavSection title="Execution" items={[{ href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' }, { href: '/execution/history', icon: History, label: 'Job History' }, { href: [...]
+          <NavSection title="Workloads" items={[
+            { href: '/workloads', icon: Briefcase, label: 'All Workloads' },
+            { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }
+          ]} />
+          <NavSection title="Execution" items={[
+            { href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' },
+            { href: '/execution/history', icon: History, label: 'Job History' },
+            { href: '/execution/new', icon: Zap, label: 'New Job' }
+          ]} />
           <NavSection title="Discovery" items={[{ href: '/engine', icon: Search, label: 'Engine' }]} />
           <NavSection title="Decision" items={[{ href: '/decide', icon: BarChart2, label: 'Decide' }]} />
-          <NavSection title="Observability" items={[{ href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' }, { href: '/observability/cost-analytics', icon: LineChartIc[...]
+          <NavSection title="Observability" items={[
+            { href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' },
+            { href: '/observability/cost-analytics', icon: LineChartIcon, label: 'Cost Analytics' }
+          ]} />
           <NavSection title="Policies" items={[{ href: '/settings/policies', icon: ShieldCheck, label: 'Policies' }]} />
-          <NavSection title="Providers" items={[{ href: '/settings/providers', icon: Building2, label: 'All Providers' }, { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Pro[...]
-          <NavSection title="Settings" items={[{ href: '/settings/company', icon: Building2, label: 'Company' }, { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' }, { href: '/set[...]
+          <NavSection title="Providers" items={[
+            { href: '/settings/providers', icon: Building2, label: 'All Providers' },
+            { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Provider' }
+          ]} />
+          <NavSection title="Settings" items={[
+            { href: '/settings/company', icon: Building2, label: 'Company' },
+            { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' },
+            { href: '/settings/integrations', icon: Network, label: 'Integrations' }
+          ]} />
         </nav>
       </aside>
 

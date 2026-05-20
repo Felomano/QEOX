@@ -5,20 +5,15 @@ import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
-  User, Search, BarChart2, PlayCircle, Settings, ArrowRight,
-  Clock, Key, Building2, SlidersHorizontal, LogOut,
-  ChevronDown, Shield, LayoutDashboard, TrendingUp,
-  CheckCircle2, DollarSign,Zap
+  User, Search, BarChart2, PlayCircle, ArrowRight,
+  Clock, LayoutDashboard, TrendingUp,
+  CheckCircle2, DollarSign, Zap, Activity, History, Network, RefreshCw, LineChart as LineChartIcon, PiggyBank, ShieldCheck, Timer, Briefcase, PlusCircle, Users, Bell, Lock, KeyRound, Building2
 } from 'lucide-react'
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
+  LineChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   PieChart, Pie, Cell, AreaChart, Area 
 } from 'recharts'
 
@@ -35,7 +30,6 @@ export default function DashboardPage() {
     successRate: 0
   })
   const [recentJobs, setRecentJobs] = useState([])
-  const [orgData, setOrgData] = useState<any>(null)
   
   const supabase = createClient()
   const router = useRouter()
@@ -52,7 +46,6 @@ export default function DashboardPage() {
           .from('organizations')
           .select('*')
           .single()
-        setOrgData(org)
 
         // 3. Cargar Métricas Reales de Jobs
         const { data: jobs } = await supabase
@@ -79,44 +72,27 @@ export default function DashboardPage() {
     loadDashboardData()
   }, [supabase])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/')
-  }
 
   return (
     <div className="flex min-h-screen bg-[#020617] text-slate-200">
       
       {/* 🧭 SIDEBAR IZQUIERDO */}
-      <aside className="w-64 border-r border-slate-800 bg-[#020617] flex flex-col sticky top-0 h-screen">
+      <aside className="w-72 border-r border-slate-800 bg-[#020617] flex flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="p-6">
           <Image src="/logoqeox.png" alt="QEOX Logo" width={100} height={32} priority className="object-contain" />
         </div>
-        
-        <nav className="flex-1 px-4 space-y-2 mt-4">
-          <NavItem href="/home" icon={LayoutDashboard} label="Dashboard" active />
-          <NavItem href="/engine" icon={Search} label="Discover" />
-          <NavItem href="/decide" icon={BarChart2} label="Decide" />
-          <NavItem href="/execution" icon={PlayCircle} label="Execution" />
-        </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="w-full justify-start gap-3 text-slate-400 hover:text-white">
-                <Settings className="w-5 h-5" />
-                <span>Settings</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent side="right" align="end" className="w-56 bg-slate-900 border-slate-800 text-slate-200">
-              <DropdownMenuItem onClick={() => router.push('/settings/providers')}><Key className="mr-2 w-4 h-4" /> Providers</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/settings/policies')}><Shield className="mr-2 w-4 h-4" /> Policies</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/settings/company')}><Building2 className="mr-2 w-4 h-4" /> Company</DropdownMenuItem>
-              <DropdownMenuSeparator className="bg-slate-800" />
-              <DropdownMenuItem onClick={handleLogout} className="text-red-400"><LogOut className="mr-2 w-4 h-4" /> Logout</DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+        <nav className="flex-1 px-4 pb-6 space-y-4 text-sm">
+          <NavSection title="Core" items={[{ href: '/home', icon: LayoutDashboard, label: 'Dashboard' }]} />
+          <NavSection title="Workloads" items={[{ href: '/workloads', icon: Briefcase, label: 'All Workloads' }, { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }, { href: '/workloads/sample-workload', icon: ArrowRight, label: 'Workload Detail' }]} />
+          <NavSection title="Execution" items={[{ href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' }, { href: '/execution/history', icon: History, label: 'Job History' }, { href: '/execution/graph', icon: Network, label: 'Execution Graph' }, { href: '/execution/failover', icon: RefreshCw, label: 'Retry / Failover Monitor' }]} />
+          <NavSection title="Discovery" items={[{ href: '/engine', icon: Search, label: 'Engine' }]} />
+          <NavSection title="Decision" items={[{ href: '/decide', icon: BarChart2, label: 'Decide' }]} />
+          <NavSection title="Observability" items={[{ href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' }, { href: '/observability/cost-analytics', icon: LineChartIcon, label: 'Cost Analytics' }, { href: '/observability/savings-dashboard', icon: PiggyBank, label: 'Savings Dashboard' }, { href: '/observability/sla-monitoring', icon: ShieldCheck, label: 'SLA Monitoring' }, { href: '/observability/execution-timeline', icon: Timer, label: 'Execution Timeline' }]} />
+          <NavSection title="Policies" items={[{ href: '/settings/policies', icon: ShieldCheck, label: 'Policies' }]} />
+          <NavSection title="Providers" items={[{ href: '/settings/providers', icon: Building2, label: 'All Providers' }, { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Provider' }]} />
+          <NavSection title="Settings" items={[{ href: '/settings/company', icon: Building2, label: 'Company' }, { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' }, { href: '/settings/api-keys', icon: KeyRound, label: 'API Keys' }, { href: '/settings/notifications', icon: Bell, label: 'Notifications' }, { href: '/settings/security', icon: Lock, label: 'Security' }]} />
+        </nav>
       </aside>
 
       {/* 🖥️ MAIN CONTENT */}
@@ -260,6 +236,18 @@ export default function DashboardPage() {
 }
 
 // --- HELPERS & COMPONENTS ---
+
+
+function NavSection({ title, items }: { title: string; items: { href: string; icon: any; label: string }[] }) {
+  return (
+    <div className="space-y-1">
+      <p className="px-2 text-[10px] uppercase tracking-[0.18em] text-slate-500 font-black">{title}</p>
+      {items.map((item) => (
+        <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
+      ))}
+    </div>
+  )
+}
 
 function NavItem({ href, icon: Icon, label, active = false }: any) {
   return (

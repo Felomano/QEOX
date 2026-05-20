@@ -252,11 +252,11 @@ function NavSection({ title, items }: { title: string; items: { href: string; ic
 function NavItem({ href, icon: Icon, label, active = false }: any) {
   return (
     <Link href={href}>
-      <div className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-all ${
+      <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
         active ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
       }`}>
         <Icon className="w-5 h-5" />
-        <span className="font-medium text-sm">{label}</span>
+        <span className={`font-medium ${labelSize}`}>{label}</span>
       </div>
     </Link>
   )

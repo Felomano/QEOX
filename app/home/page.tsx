@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import {
   User, Search, BarChart2, PlayCircle, ArrowRight,
   Clock, LayoutDashboard, TrendingUp,
-  CheckCircle2, DollarSign, Zap, Activity, History, Network, RefreshCw, LineChart as LineChartIcon, PiggyBank, ShieldCheck, Timer, Briefcase, PlusCircle, Users, Bell, Lock, KeyRound, Building2, ChevronDown
+  CheckCircle2, DollarSign, Zap, Activity, History, Network, RefreshCw, LineChart as LineChartIcon, PiggyBank, ShieldCheck, Timer, Briefcase, PlusCircle, Users, Bell, Lock, KeyRound, Building2
 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -30,7 +30,6 @@ export default function DashboardPage() {
     successRate: 0
   })
   const [recentJobs, setRecentJobs] = useState([])
-  const [openSection, setOpenSection] = useState<string>('Execution')
   
   const supabase = createClient()
   const router = useRouter()
@@ -78,21 +77,21 @@ export default function DashboardPage() {
     <div className="flex min-h-screen bg-[#020617] text-slate-200">
       
       {/* 🧭 SIDEBAR IZQUIERDO */}
-      <aside className="w-72 border-r border-slate-800 bg-[#020617] flex flex-col sticky top-0 h-screen overflow-hidden">
+      <aside className="w-72 border-r border-slate-800 bg-[#020617] flex flex-col sticky top-0 h-screen overflow-y-auto">
         <div className="p-6">
           <Image src="/logoqeox.png" alt="QEOX Logo" width={100} height={32} priority className="object-contain" />
         </div>
 
-        <nav className="flex-1 px-4 pb-6 space-y-2 text-sm">
-          <NavItem href="/home" icon={LayoutDashboard} label="Dashboard" active />
-          <DrillSection title="Workloads" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/workloads', icon: Briefcase, label: 'All Workloads' }, { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }, { href: '/workloads/sample-workload', icon: ArrowRight, label: 'Workload Detail' }]} />
-          <DrillSection title="Execution" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' }, { href: '/execution/history', icon: History, label: 'Job History' }, { href: '/execution/graph', icon: Network, label: 'Execution Graph' }, { href: '/execution/failover', icon: RefreshCw, label: 'Retry / Failover Monitor' }]} />
-          <DrillSection title="Discovery" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/engine', icon: Search, label: 'Engine' }]} />
-          <DrillSection title="Decision" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/decide', icon: BarChart2, label: 'Decide' }]} />
-          <DrillSection title="Observability" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' }, { href: '/observability/cost-analytics', icon: LineChartIcon, label: 'Cost Analytics' }, { href: '/observability/savings-dashboard', icon: PiggyBank, label: 'Savings Dashboard' }, { href: '/observability/sla-monitoring', icon: ShieldCheck, label: 'SLA Monitoring' }, { href: '/observability/execution-timeline', icon: Timer, label: 'Execution Timeline' }]} />
-          <DrillSection title="Policies" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/settings/policies', icon: ShieldCheck, label: 'Policies' }]} />
-          <DrillSection title="Providers" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/settings/providers', icon: Building2, label: 'All Providers' }, { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Provider' }]} />
-          <DrillSection title="Settings" openSection={openSection} setOpenSection={setOpenSection} items={[{ href: '/settings/company', icon: Building2, label: 'Company' }, { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' }, { href: '/settings/api-keys', icon: KeyRound, label: 'API Keys' }, { href: '/settings/notifications', icon: Bell, label: 'Notifications' }, { href: '/settings/security', icon: Lock, label: 'Security' }]} />
+        <nav className="flex-1 px-4 pb-6 space-y-4 text-sm">
+          <NavSection title="Core" items={[{ href: '/home', icon: LayoutDashboard, label: 'Dashboard' }]} />
+          <NavSection title="Workloads" items={[{ href: '/workloads', icon: Briefcase, label: 'All Workloads' }, { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }, { href: '/workloads/sample-workload', icon: ArrowRight, label: 'Workload Detail' }]} />
+          <NavSection title="Execution" items={[{ href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' }, { href: '/execution/history', icon: History, label: 'Job History' }, { href: '/execution/graph', icon: Network, label: 'Execution Graph' }, { href: '/execution/failover', icon: RefreshCw, label: 'Retry / Failover Monitor' }]} />
+          <NavSection title="Discovery" items={[{ href: '/engine', icon: Search, label: 'Engine' }]} />
+          <NavSection title="Decision" items={[{ href: '/decide', icon: BarChart2, label: 'Decide' }]} />
+          <NavSection title="Observability" items={[{ href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' }, { href: '/observability/cost-analytics', icon: LineChartIcon, label: 'Cost Analytics' }, { href: '/observability/savings-dashboard', icon: PiggyBank, label: 'Savings Dashboard' }, { href: '/observability/sla-monitoring', icon: ShieldCheck, label: 'SLA Monitoring' }, { href: '/observability/execution-timeline', icon: Timer, label: 'Execution Timeline' }]} />
+          <NavSection title="Policies" items={[{ href: '/settings/policies', icon: ShieldCheck, label: 'Policies' }]} />
+          <NavSection title="Providers" items={[{ href: '/settings/providers', icon: Building2, label: 'All Providers' }, { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Provider' }]} />
+          <NavSection title="Settings" items={[{ href: '/settings/company', icon: Building2, label: 'Company' }, { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' }, { href: '/settings/api-keys', icon: KeyRound, label: 'API Keys' }, { href: '/settings/notifications', icon: Bell, label: 'Notifications' }, { href: '/settings/security', icon: Lock, label: 'Security' }]} />
         </nav>
       </aside>
 
@@ -239,36 +238,25 @@ export default function DashboardPage() {
 // --- HELPERS & COMPONENTS ---
 
 
-
-function DrillSection({ title, items, openSection, setOpenSection }: { title: string; items: { href: string; icon: any; label: string }[]; openSection: string; setOpenSection: (v: string) => void }) {
-  const isOpen = openSection === title
+function NavSection({ title, items }: { title: string; items: { href: string; icon: any; label: string }[] }) {
   return (
-    <div className="rounded-lg border border-slate-800/80 bg-slate-900/20">
-      <button onClick={() => setOpenSection(isOpen ? '' : title)} className="w-full flex items-center justify-between px-3 py-2 text-slate-300 hover:text-white">
-        <span className="text-[11px] uppercase tracking-[0.14em] font-black">{title}</span>
-        <ChevronDown className={`w-4 h-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-      </button>
-      {isOpen && <div className="px-2 pb-2 space-y-1">{items.map((item) => <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} compact />)}</div>}
+    <div className="space-y-1">
+      <p className="px-2 text-[10px] uppercase tracking-[0.18em] text-slate-500 font-black">{title}</p>
+      {items.map((item) => (
+        <NavItem key={item.href} href={item.href} icon={item.icon} label={item.label} />
+      ))}
     </div>
   )
 }
 
-type NavItemProps = { href: string; icon: any; label: string; active?: boolean; compact?: boolean }
-
-function NavItem(props: NavItemProps) {
-  const href = props.href
-  const Icon = props.icon
-  const label = props.label
-  const active = props.active ?? false
-  const compact = props.compact ?? false
-
+function NavItem({ href, icon: Icon, label, active = false }: any) {
   return (
     <Link href={href}>
       <div className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all ${
         active ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
       }`}>
         <Icon className="w-5 h-5" />
-        <span className={compact ? 'font-medium text-xs' : 'font-medium text-sm'}>{label}</span>
+        <span className={`font-medium ${labelSize}`}>{label}</span>
       </div>
     </Link>
   )

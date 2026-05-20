@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import Link from "next/link";
 
 type ExecutionTier = "classic" | "hybrid" | "quantum";
+type PolicyMode = "my_providers" | "ai_optimization";
+type Goal = "reduce_cost" | "maximize_speed" | "balanced" | "experimental_quantum";
+type Mode = "auto" | "classical" | "hybrid" | "quantum";
 
 type Provider = {
   id: string;
@@ -106,10 +109,7 @@ export default function NewExecutionPage() {
 
   const preferredProviderNames = useMemo(() => filteredProviders.map((p) => p.provider_name), [filteredProviders]);
 
-  const estimatedCost = useMemo(() => {
-    if (!selectedProvider) return 0;
-    return Number(selectedProvider.unit_price) * Number(configShots);
-  }, [selectedProvider, configShots]);
+  const estimatedCost = useMemo(() => Number(selectedProvider?.unit_price ?? 0) * 1200, [selectedProvider]);
 
   const predictedRuntime = useMemo(() => {
     const secs = Math.max(35, Math.round((configShots / Math.max(configQubits, 1)) * 4.2));
@@ -126,8 +126,8 @@ export default function NewExecutionPage() {
   }, [filteredProviders, selectedProviderId]);
 
   const handleLaunch = async () => {
-    if (!workloadName.trim()) return toast.error("El workload_name es obligatorio.");
-    if (!selectedProvider) return toast.error("Selecciona un proveedor activo.");
+    if (!workloadName.trim()) return toast.error("Workload Name es obligatorio.");
+    if (!selectedProvider) return toast.error("No hay proveedores activos para ese Execution Mode.");
     if (!organization) return toast.error("No se pudo resolver la organización del usuario.");
 
     let parsedParameters: Record<string, unknown>;
@@ -150,11 +150,16 @@ export default function NewExecutionPage() {
         body: JSON.stringify({
           workload_name: workloadName,
           industry,
-          tier,
+          tier: resolvedTier,
           assigned_provider_id: selectedProvider.id,
-          config_qubits: configQubits,
-          config_shots: configShots,
-          parameters: parsedParameters,
+          config_qubits: 24,
+          config_shots: 1200,
+          parameters: {
+            description,
+            optimization_goal: optimizationGoal,
+            execution_mode: executionMode,
+            policy_mode: policyMode,
+          },
           organization_id: organization.id,
         }),
       });

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, Atom, Loader2, Rocket, ShieldAlert } from "lucide-react";
+import { ArrowLeft, Atom, Loader2, Rocket } from "lucide-react";
 import { toast } from "sonner";
 import Link from "next/link";
 
@@ -15,6 +15,7 @@ type Provider = {
   tier: ExecutionTier;
   unit_price: number;
   is_enabled: boolean;
+  priority_level?: number;
 };
 
 type Organization = {
@@ -24,13 +25,11 @@ type Organization = {
   currency: string;
 };
 
-type RecentJob = {
+type Policy = {
   id: string;
-  status: string;
-  estimated_cost: number;
-  created_at: string;
-  workloads?: { workload_name: string | null } | null;
-  providers?: { provider_name: string | null } | null;
+  tier: ExecutionTier;
+  auto_failover: boolean;
+  max_cost_per_job: number;
 };
 
 const DEFAULT_PARAMETERS = {
@@ -44,101 +43,87 @@ export default function NewExecutionPage() {
   const router = useRouter();
 
   const [loading, setLoading] = useState(false);
-  const [loadingProviders, setLoadingProviders] = useState(true);
-
+  const [loadingData, setLoadingData] = useState(true);
   const [providers, setProviders] = useState<Provider[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
   const [organization, setOrganization] = useState<Organization | null>(null);
-  const [recentJobs, setRecentJobs] = useState<RecentJob[]>([]);
 
   const [workloadName, setWorkloadName] = useState("QEOX-HYBRID-OPT-001");
-  const [tier, setTier] = useState<ExecutionTier>("hybrid");
-  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+  const [description, setDescription] = useState("Quantum-inspired optimization for mission-critical decisions.");
   const [industry, setIndustry] = useState("Finance");
-  const [objective, setObjective] = useState("Portfolio Optimization");
+  const [businessObjective, setBusinessObjective] = useState("Reduce infrastructure compute cost");
+
+  const [tier, setTier] = useState<ExecutionTier>("hybrid");
+  const [executionType, setExecutionType] = useState("Batch");
+  const [optimizationGoal, setOptimizationGoal] = useState("Cost-efficient");
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("");
+
   const [configQubits, setConfigQubits] = useState(24);
   const [configShots, setConfigShots] = useState(1200);
   const [parametersText, setParametersText] = useState(JSON.stringify(DEFAULT_PARAMETERS, null, 2));
 
-  const loadRecentJobs = async () => {
-    const { data } = await supabase
-      .from("jobs")
-      .select("id,status,estimated_cost,created_at,workloads(workload_name),providers(provider_name)")
-      .order("created_at", { ascending: false })
-      .limit(6);
-
-    setRecentJobs((data as RecentJob[]) ?? []);
-  };
+  const [sla, setSla] = useState("99.9% / <5 min");
 
   useEffect(() => {
     const bootstrap = async () => {
-      setLoadingProviders(true);
+      setLoadingData(true);
+      const [{ data: providerRows }, { data: policyRows }, { data: authData }] = await Promise.all([
+        supabase.from("providers").select("id, provider_name, tier, unit_price, is_enabled, priority_level").eq("is_enabled", true),
+        supabase.from("execution_policies").select("id, tier, auto_failover, max_cost_per_job"),
+        supabase.auth.getUser(),
+      ]);
 
-      const [{ data: providerRows, error: providersError }, { data: authData, error: userError }] =
-        await Promise.all([
-          supabase
-            .from("providers")
-            .select("id, provider_name, tier, unit_price, is_enabled")
-            .eq("is_enabled", true),
-          supabase.auth.getUser(),
-        ]);
+      setProviders((providerRows ?? []) as Provider[]);
+      setPolicies((policyRows ?? []) as Policy[]);
 
-      if (providersError) {
-        toast.error(`No se pudieron cargar proveedores: ${providersError.message}`);
-      } else {
-        setProviders((providerRows ?? []) as Provider[]);
-      }
-
-      if (!userError && authData.user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("org_id")
-          .eq("id", authData.user.id)
-          .single();
-
+      if (authData.user) {
+        const { data: profile } = await supabase.from("profiles").select("org_id").eq("id", authData.user.id).single();
         if (profile?.org_id) {
-          const { data: orgRow, error: orgError } = await supabase
+          const { data: orgRow } = await supabase
             .from("organizations")
             .select("id, current_spend, monthly_budget, currency")
             .eq("id", profile.org_id)
             .single();
-
-          if (orgError) {
-            toast.error(`No se pudo cargar la organización: ${orgError.message}`);
-          } else {
-            setOrganization(orgRow as Organization);
-          }
+          setOrganization((orgRow as Organization) ?? null);
         }
       }
-
-      await loadRecentJobs();
-      setLoadingProviders(false);
+      setLoadingData(false);
     };
 
     bootstrap();
   }, [supabase]);
 
-  const filteredProviders = useMemo(
-    () => providers.filter((p) => p.tier?.toLowerCase() === tier),
-    [providers, tier]
-  );
+  const filteredProviders = useMemo(() => providers.filter((p) => p.tier?.toLowerCase() === tier), [providers, tier]);
 
   useEffect(() => {
-    if (!filteredProviders.length) {
-      setSelectedProviderId("");
-      return;
-    }
-    setSelectedProviderId((prev) => prev || filteredProviders[0].id);
+    if (!filteredProviders.length) return setSelectedProviderId("");
+    const primary = filteredProviders.find((p) => p.priority_level === 1);
+    setSelectedProviderId((prev) => prev || primary?.id || filteredProviders[0].id);
   }, [filteredProviders]);
 
-  const selectedProvider = useMemo(
-    () => filteredProviders.find((p) => p.id === selectedProviderId),
-    [filteredProviders, selectedProviderId]
-  );
+  const selectedProvider = useMemo(() => filteredProviders.find((p) => p.id === selectedProviderId), [filteredProviders, selectedProviderId]);
+  const activePolicy = useMemo(() => policies.find((p) => p.tier === tier), [policies, tier]);
+
+  const preferredProviderNames = useMemo(() => filteredProviders.map((p) => p.provider_name), [filteredProviders]);
 
   const estimatedCost = useMemo(() => {
     if (!selectedProvider) return 0;
     return Number(selectedProvider.unit_price) * Number(configShots);
   }, [selectedProvider, configShots]);
+
+  const predictedRuntime = useMemo(() => {
+    const secs = Math.max(35, Math.round((configShots / Math.max(configQubits, 1)) * 4.2));
+    const minutes = Math.floor(secs / 60);
+    const rem = secs % 60;
+    return `${minutes}m ${String(rem).padStart(2, "0")}s`;
+  }, [configShots, configQubits]);
+
+  const optimizationConfidence = useMemo(() => Math.min(98, Math.max(70, Math.round(88 + configQubits / 16 - configShots / 3000))), [configQubits, configShots]);
+
+  const fallbackProvider = useMemo(() => {
+    const alternative = filteredProviders.find((p) => p.id !== selectedProviderId);
+    return alternative?.provider_name ?? "AWS HPC";
+  }, [filteredProviders, selectedProviderId]);
 
   const handleLaunch = async () => {
     if (!workloadName.trim()) return toast.error("El workload_name es obligatorio.");
@@ -147,18 +132,14 @@ export default function NewExecutionPage() {
 
     let parsedParameters: Record<string, unknown>;
     try {
-      parsedParameters = { ...JSON.parse(parametersText), objective };
+      parsedParameters = { ...JSON.parse(parametersText), objective: businessObjective, execution_type: executionType };
     } catch {
       return toast.error("El campo parameters debe ser JSON válido.");
     }
 
     const projectedSpend = Number(organization.current_spend) + estimatedCost;
     if (projectedSpend > Number(organization.monthly_budget)) {
-      return toast.error(
-        `Presupuesto excedido. Proyección: ${projectedSpend.toFixed(2)} ${organization.currency} / Límite: ${Number(
-          organization.monthly_budget
-        ).toFixed(2)} ${organization.currency}`
-      );
+      return toast.error(`Presupuesto excedido. Proyección: ${projectedSpend.toFixed(2)} ${organization.currency}`);
     }
 
     setLoading(true);
@@ -195,126 +176,81 @@ export default function NewExecutionPage() {
     <main className="min-h-screen bg-gradient-to-br from-[#0B3FA8] via-[#10367d] to-[#1e40af] p-6 md:p-10 text-slate-100">
       <div className="max-w-6xl mx-auto rounded-2xl border border-blue-300/20 bg-[#0b162f]/80 shadow-2xl overflow-hidden backdrop-blur-md">
         <header className="h-20 px-8 flex items-center justify-between border-b border-blue-300/20 bg-[#1147aa]">
-          <div className="flex items-center gap-3">
-            <Atom className="text-blue-100" />
-            <h1 className="text-3xl font-semibold tracking-tight">Compute Intelligence Platform</h1>
-          </div>
-          <Link href="/execution" className="inline-flex items-center gap-2 text-blue-100 hover:text-white text-xs uppercase tracking-wider">
-            <ArrowLeft size={14} /> Back
-          </Link>
+          <div className="flex items-center gap-3"><Atom className="text-blue-100" /><h1 className="text-3xl font-semibold tracking-tight">Create Intelligent Job</h1></div>
+          <Link href="/execution" className="inline-flex items-center gap-2 text-blue-100 hover:text-white text-xs uppercase tracking-wider"><ArrowLeft size={14} /> Back</Link>
         </header>
 
-        <div className="p-6 md:p-8 space-y-6 bg-[#0f1f3f]/90">
-          <div className="border-b border-blue-200/20 pb-3 text-sm text-blue-100 flex gap-6">
-            <span className="font-semibold border-b-2 border-blue-400 pb-2">Create Job</span>
-            <span className="text-blue-200/70">Job History</span>
-          </div>
+        <div className="p-6 md:p-8 grid lg:grid-cols-3 gap-6 bg-[#0f1f3f]/90">
+          <section className="lg:col-span-2 rounded-xl border border-blue-100/20 bg-[#111f3e] p-6 space-y-5">
+            <SectionTitle title="SECTION 1 — Business Context" />
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Industry"><input value={industry} onChange={(e) => setIndustry(e.target.value)} className={inputCss} /></Field>
+              <Field label="Workload Name"><input value={workloadName} onChange={(e) => setWorkloadName(e.target.value)} className={inputCss} /></Field>
+              <Field label="Description"><input value={description} onChange={(e) => setDescription(e.target.value)} className={inputCss} /></Field>
+              <Field label="Business Objective"><input value={businessObjective} onChange={(e) => setBusinessObjective(e.target.value)} className={inputCss} /></Field>
+            </div>
 
-          <section className="rounded-xl border border-blue-100/20 bg-[#111f3e] p-6 space-y-5">
-            <h2 className="text-3xl font-semibold text-blue-300">Create Job</h2>
+            <SectionTitle title="SECTION 2 — Optimization Strategy" />
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Execution Type"><input value={executionType} onChange={(e) => setExecutionType(e.target.value)} className={inputCss} /></Field>
+              <Field label="Optimization Goal"><input value={optimizationGoal} onChange={(e) => setOptimizationGoal(e.target.value)} className={inputCss} /></Field>
+              <Field label="Policy Mode"><div className="px-3 py-2 rounded-lg border border-blue-200/30 bg-[#0b1731] text-sm">{activePolicy ? `${activePolicy.tier.toUpperCase()} • max/job ${activePolicy.max_cost_per_job}` : "No policy configured"}</div></Field>
+              <Field label="Preferred Providers"><div className="px-3 py-2 rounded-lg border border-blue-200/30 bg-[#0b1731] text-sm">{preferredProviderNames.join(", ") || "No active providers"}</div></Field>
+            </div>
 
+            <SectionTitle title="SECTION 3 — Technical Configuration" />
+            <div className="grid md:grid-cols-2 gap-4">
+              <Field label="Execution Tier"><select value={tier} onChange={(e) => setTier(e.target.value as ExecutionTier)} className={inputCss}><option value="classic">Classic</option><option value="hybrid">Hybrid</option><option value="quantum">Quantum</option></select></Field>
+              <Field label="Primary Provider"><select value={selectedProviderId} onChange={(e) => setSelectedProviderId(e.target.value)} className={inputCss}>{filteredProviders.map((p) => <option key={p.id} value={p.id}>{p.provider_name}</option>)}</select></Field>
+              <Field label="shots"><input type="number" value={configShots} min={1} onChange={(e) => setConfigShots(Number(e.target.value))} className={inputCss} /></Field>
+              <Field label="qubits"><input type="number" value={configQubits} min={1} onChange={(e) => setConfigQubits(Number(e.target.value))} className={inputCss} /></Field>
+            </div>
+            <Field label="parameters JSON"><textarea rows={4} value={parametersText} onChange={(e) => setParametersText(e.target.value)} className={`${inputCss} font-mono text-xs`} /></Field>
+
+            <SectionTitle title="SECTION 4 — Governance" />
             <div className="grid md:grid-cols-3 gap-4">
-              <Field label="Industry">
-                <input value={industry} onChange={(e) => setIndustry(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-              </Field>
-              <Field label="Objective">
-                <input value={objective} onChange={(e) => setObjective(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-              </Field>
-              <Field label="Workload Name">
-                <input value={workloadName} onChange={(e) => setWorkloadName(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-              </Field>
+              <Field label="Budget"><div className="px-3 py-2 rounded-lg border border-blue-200/30 bg-[#0b1731] text-sm">{organization ? `${organization.current_spend.toFixed(2)} / ${organization.monthly_budget.toFixed(2)} ${organization.currency}` : "Loading..."}</div></Field>
+              <Field label="SLA"><input value={sla} onChange={(e) => setSla(e.target.value)} className={inputCss} /></Field>
+              <Field label="Fallback Strategy"><div className="px-3 py-2 rounded-lg border border-blue-200/30 bg-[#0b1731] text-sm">{activePolicy?.auto_failover ? `Auto-failover to ${fallbackProvider}` : `Manual fallback to ${fallbackProvider}`}</div></Field>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-4">
-              <Field label="Execution Type">
-                <select value={tier} onChange={(e) => setTier(e.target.value as ExecutionTier)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50">
-                  <option value="classic">Classic</option>
-                  <option value="hybrid">Hybrid</option>
-                  <option value="quantum">Quantum</option>
-                </select>
-              </Field>
-              <Field label="Compute Optimization">
-                <select
-                  value={selectedProviderId}
-                  onChange={(e) => setSelectedProviderId(e.target.value)}
-                  disabled={loadingProviders || !filteredProviders.length}
-                  className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
-                >
-                  {filteredProviders.map((provider) => (
-                    <option key={provider.id} value={provider.id}>{provider.provider_name}</option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="Config (Qubits / Shots)">
-                <div className="grid grid-cols-2 gap-2">
-                  <input type="number" value={configQubits} min={1} onChange={(e) => setConfigQubits(Number(e.target.value))} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-                  <input type="number" value={configShots} min={1} onChange={(e) => setConfigShots(Number(e.target.value))} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
-                </div>
-              </Field>
-            </div>
-
-            <Field label="Parameters (JSON)">
-              <textarea rows={4} value={parametersText} onChange={(e) => setParametersText(e.target.value)} className="w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50 font-mono text-xs" />
-            </Field>
-
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-t border-blue-100/20 pt-4">
-              <div className="inline-flex items-start gap-2 text-xs text-blue-100 bg-blue-500/20 border border-blue-300/30 rounded-lg px-3 py-2">
-                <ShieldAlert size={15} className="mt-0.5" />
-                <div>
-                  <p>Estimated: {estimatedCost.toFixed(2)} {organization?.currency ?? "USD"}</p>
-                  <p>Budget check: {(Number(organization?.current_spend ?? 0) + estimatedCost).toFixed(2)} / {Number(organization?.monthly_budget ?? 0).toFixed(2)}</p>
-                </div>
-              </div>
-              <button onClick={handleLaunch} disabled={loading || loadingProviders} className="px-8 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold min-w-44 inline-flex items-center justify-center gap-2">
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <Rocket size={16} />} Create Job
-              </button>
-            </div>
+            <button onClick={handleLaunch} disabled={loading || loadingData} className="w-full mt-2 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:bg-blue-900/60 text-white font-semibold py-3">
+              {loading ? <><Loader2 className="animate-spin" size={16} /> Launching...</> : <><Rocket size={16} /> Launch Execution</>}
+            </button>
           </section>
 
-          <section className="rounded-xl border border-blue-100/20 bg-[#111f3e] p-6">
-            <h3 className="text-3xl font-semibold text-blue-300 mb-4">Results History</h3>
-            <div className="overflow-auto rounded-lg border border-blue-200/20">
-              <table className="w-full text-sm">
-                <thead className="bg-[#162a52] text-blue-100">
-                  <tr>
-                    <th className="text-left px-4 py-3">Recent Job</th>
-                    <th className="text-left px-4 py-3">Submitted</th>
-                    <th className="text-left px-4 py-3">Provider</th>
-                    <th className="text-left px-4 py-3">Objective</th>
-                    <th className="text-left px-4 py-3">Cost</th>
-                    <th className="text-left px-4 py-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentJobs.map((row) => (
-                    <tr key={row.id} className="border-t border-blue-200/10">
-                      <td className="px-4 py-3 text-blue-300">{row.id}</td>
-                      <td className="px-4 py-3">{new Date(row.created_at).toLocaleString()}</td>
-                      <td className="px-4 py-3">{row.providers?.provider_name ?? "-"}</td>
-                      <td className="px-4 py-3">{objective}</td>
-                      <td className="px-4 py-3">${Number(row.estimated_cost ?? 0).toFixed(2)}</td>
-                      <td className="px-4 py-3">
-                        <span className="text-[11px] uppercase rounded px-2 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-300/30">{row.status}</span>
-                      </td>
-                    </tr>
-                  ))}
-                  {!recentJobs.length && (
-                    <tr><td className="px-4 py-4 text-slate-300" colSpan={6}>No hay jobs recientes.</td></tr>
-                  )}
-                </tbody>
-              </table>
+          <aside className="rounded-xl border border-cyan-400/30 bg-[#0d1b37] p-6 space-y-4">
+            <h3 className="text-cyan-300 font-bold">SECTION 5 — AI Prediction (WOW factor)</h3>
+            <p>Estimated cost: €{estimatedCost.toFixed(0)}</p>
+            <p>Predicted runtime: {predictedRuntime}</p>
+            <p>Optimization confidence: {optimizationConfidence}%</p>
+            <p>Suggested execution: {tier === "quantum" ? "Hybrid" : "Hybrid"}</p>
+            <p className="text-yellow-300">🏁 Lo más potente que puedes hacer</p>
+
+            <div className="border-t border-blue-200/20 pt-4 space-y-2 text-sm">
+              <h4 className="font-semibold text-blue-200">Execution Plan</h4>
+              <p><span className="text-slate-400">Primary:</span> {selectedProvider?.provider_name || "IonQ Forte"}</p>
+              <p><span className="text-slate-400">Fallback:</span> {fallbackProvider}</p>
+              <p><span className="text-slate-400">Optimization Strategy:</span> {optimizationGoal} {tier} execution</p>
+              <p><span className="text-slate-400">Expected savings:</span> {Math.min(35, Math.max(8, Math.round((optimizationConfidence - 70) * 0.8)))}%</p>
             </div>
-          </section>
+          </aside>
         </div>
       </div>
     </main>
   );
 }
 
+const inputCss = "w-full rounded-lg border border-blue-200/30 bg-[#0b1731] px-3 py-2 text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500/50";
+
+function SectionTitle({ title }: { title: string }) {
+  return <h2 className="text-lg font-semibold text-blue-300">{title}</h2>;
+}
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="space-y-2 block">
-      <span className="text-sm font-medium text-blue-100">{label}</span>
+    <label className="block space-y-1">
+      <span className="text-xs uppercase tracking-wide text-blue-100">{label}</span>
       {children}
     </label>
   );

@@ -2,47 +2,34 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, BrainCircuit, CheckCircle2, Loader2, Rocket, ShieldCheck, Sparkles } from "lucide-react";
+import { ArrowLeft, BrainCircuit, CheckCircle2, Loader2, Rocket, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 const inputCss =
   "w-full rounded-xl border border-blue-200/25 bg-[#0b1731]/90 px-3 py-2.5 text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-blue-300/70 focus:ring-2 focus:ring-blue-500/30";
 
-type ExecutionTier = "classic" | "hybrid" | "quantum";
-
-type Provider = {
-  id: string;
-  provider_name: string;
-  tier: ExecutionTier;
-  unit_price: number | null;
-  is_enabled: boolean;
-  priority_level?: number | null;
-};
-
-type Policy = {
-  id: string;
-  tier: ExecutionTier;
-  auto_failover: boolean;
-  max_cost_per_job: number | null;
-};
-
 type WorkloadForm = {
   workloadName: string;
+  lifecycleStatus: string;
   industry: string;
+  totalCumulativeCost: string;
+  configQubits: string;
+  configShots: string;
   description: string;
   optimizationGoal: string;
   executionMode: string;
   policyMode: string;
 };
 
-const DEFAULT_CONFIG_QUBITS = 24;
-const DEFAULT_CONFIG_SHOTS = 1200;
-
 const initialForm: WorkloadForm = {
   workloadName: "DHL-EU-ROUTE-OPT-001",
+  lifecycleStatus: "CREATED",
   industry: "Logistics",
+  totalCumulativeCost: "0",
+  configQubits: "24",
+  configShots: "1200",
   description: "Optimize last-mile delivery routes across Europe to reduce fuel consumption and delivery time.",
   optimizationGoal: "Minimize Cost",
   executionMode: "Auto (Recommended)",
@@ -54,68 +41,13 @@ export default function CreateWorkloadPage() {
   const supabase = createClient();
   const [form, setForm] = useState<WorkloadForm>(initialForm);
   const [saving, setSaving] = useState(false);
-  const [loadingRecommendations, setLoadingRecommendations] = useState(true);
-  const [providers, setProviders] = useState<Provider[]>([]);
-  const [policies, setPolicies] = useState<Policy[]>([]);
 
-  useEffect(() => {
-    const loadRecommendationInputs = async () => {
-      setLoadingRecommendations(true);
-      const [{ data: providerRows, error: providerError }, { data: policyRows, error: policyError }] = await Promise.all([
-        supabase
-          .from("providers")
-          .select("id, provider_name, tier, unit_price, is_enabled, priority_level")
-          .eq("is_enabled", true)
-          .order("priority_level", { ascending: true, nullsFirst: false }),
-        supabase.from("execution_policies").select("id, tier, auto_failover, max_cost_per_job"),
-      ]);
-
-      if (providerError) console.error("[workloads/create] providers recommendation error", providerError);
-      if (policyError) console.error("[workloads/create] policies recommendation error", policyError);
-
-      setProviders((providerRows as Provider[]) ?? []);
-      setPolicies((policyRows as Policy[]) ?? []);
-      setLoadingRecommendations(false);
-    };
-
-    loadRecommendationInputs();
-  }, [supabase]);
-
-  const recommendedTier = useMemo<ExecutionTier>(() => {
-    if (form.executionMode === "Classic") return "classic";
-    if (form.executionMode === "Quantum") return "quantum";
-    if (form.executionMode === "Hybrid") return "hybrid";
-
-    const text = `${form.industry} ${form.description} ${form.optimizationGoal}`.toLowerCase();
-    if (text.includes("quantum") || text.includes("experimental")) return "quantum";
-    if (text.includes("speed") || text.includes("latency") || text.includes("real-time")) return "classic";
-    return "hybrid";
-  }, [form.description, form.executionMode, form.industry, form.optimizationGoal]);
-
-  const tierProviders = useMemo(
-    () => providers.filter((provider) => provider.tier?.toLowerCase() === recommendedTier),
-    [providers, recommendedTier]
-  );
-
-  const primaryProvider = useMemo(() => tierProviders[0] ?? providers[0] ?? null, [providers, tierProviders]);
-  const fallbackProvider = useMemo(
-    () => tierProviders.find((provider) => provider.id !== primaryProvider?.id) ?? providers.find((provider) => provider.id !== primaryProvider?.id) ?? null,
-    [primaryProvider?.id, providers, tierProviders]
-  );
-  const policy = useMemo(() => policies.find((item) => item.tier === recommendedTier) ?? null, [policies, recommendedTier]);
-
-  const estimatedCost = useMemo(() => Number(primaryProvider?.unit_price ?? 0) * DEFAULT_CONFIG_SHOTS, [primaryProvider?.unit_price]);
   const estimatedRuntime = useMemo(() => {
-    const tierMultiplier = recommendedTier === "classic" ? 2.5 : recommendedTier === "quantum" ? 5.2 : 4.2;
-    const seconds = Math.max(45, Math.round((DEFAULT_CONFIG_SHOTS / DEFAULT_CONFIG_QUBITS) * tierMultiplier));
+    const shots = Number(form.configShots || 0);
+    const qubits = Math.max(Number(form.configQubits || 1), 1);
+    const seconds = Math.max(45, Math.round((shots / qubits) * 4.2));
     return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
-  }, [recommendedTier]);
-  const savings = useMemo(() => {
-    const goalBonus = form.optimizationGoal === "Minimize Cost" ? 8 : form.optimizationGoal === "Balanced" ? 5 : 2;
-    const providerBonus = tierProviders.length > 1 ? 6 : 2;
-    const policyBonus = policy?.auto_failover ? 4 : 0;
-    return `${Math.min(32, 10 + goalBonus + providerBonus + policyBonus)}%`;
-  }, [form.optimizationGoal, policy?.auto_failover, tierProviders.length]);
+  }, [form.configQubits, form.configShots]);
 
   const updateField = (key: keyof WorkloadForm, value: string) => setForm((current) => ({ ...current, [key]: value }));
 
@@ -129,25 +61,17 @@ export default function CreateWorkloadPage() {
       optimization_goal: form.optimizationGoal,
       execution_mode: form.executionMode,
       policy_mode: form.policyMode,
-      recommended_tier: recommendedTier,
-      recommended_primary_provider_id: primaryProvider?.id ?? null,
-      recommended_primary_provider_name: primaryProvider?.provider_name ?? null,
-      recommended_fallback_provider_id: fallbackProvider?.id ?? null,
-      recommended_fallback_provider_name: fallbackProvider?.provider_name ?? null,
-      estimated_cost: estimatedCost,
-      estimated_runtime: estimatedRuntime,
-      estimated_savings: savings,
     };
 
     const { data, error } = await supabase
       .from("workloads")
       .insert({
         workload_name: form.workloadName.trim(),
-        lifecycle_status: "CREATED",
+        lifecycle_status: form.lifecycleStatus,
         industry: form.industry.trim() || null,
-        total_cumulative_cost: 0,
-        config_qubits: DEFAULT_CONFIG_QUBITS,
-        config_shots: DEFAULT_CONFIG_SHOTS,
+        total_cumulative_cost: Number(form.totalCumulativeCost || 0),
+        config_qubits: Number(form.configQubits || 0),
+        config_shots: Number(form.configShots || 0),
         parameters,
       })
       .select("id")
@@ -176,10 +100,10 @@ export default function CreateWorkloadPage() {
               </Link>
               <div>
                 <h1 className="text-3xl font-bold tracking-tight">Create Workload</h1>
-                <p className="mt-1 text-sm text-slate-300">Describe the business problem and let QEOX recommend the execution plan.</p>
+                <p className="mt-1 text-sm text-slate-300">Define the workload columns and let QEOX prepare optimization.</p>
               </div>
             </div>
-            <span className="rounded-full border border-blue-300/25 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">AI assisted</span>
+            <span className="rounded-full border border-blue-300/25 bg-blue-500/10 px-3 py-1 text-xs font-semibold text-blue-200">Simple setup</span>
           </header>
 
           <Section number="1" title="Business Problem" subtitle="Describe the workload you want to optimize.">
@@ -190,20 +114,22 @@ export default function CreateWorkloadPage() {
             <Field label="Description"><textarea className={`${inputCss} min-h-24 resize-y`} maxLength={300} value={form.description} onChange={(e) => updateField("description", e.target.value)} /></Field>
           </Section>
 
-          <Section number="2" title="Optimization" subtitle="QEOX uses these choices with active providers and policies to build the recommendation.">
+          <Section number="2" title="Workload Columns" subtitle="Values are saved directly in the workloads table.">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <Field label="Lifecycle Status"><select className={inputCss} value={form.lifecycleStatus} onChange={(e) => updateField("lifecycleStatus", e.target.value)}><option>CREATED</option><option>ACTIVE</option><option>PAUSED</option><option>ARCHIVED</option></select></Field>
+              <Field label="Total cumulative cost"><input className={inputCss} type="number" min="0" step="0.01" value={form.totalCumulativeCost} onChange={(e) => updateField("totalCumulativeCost", e.target.value)} /></Field>
+              <Field label="Config qubits"><input className={inputCss} type="number" min="0" value={form.configQubits} onChange={(e) => updateField("configQubits", e.target.value)} /></Field>
+              <Field label="Config shots"><input className={inputCss} type="number" min="0" value={form.configShots} onChange={(e) => updateField("configShots", e.target.value)} /></Field>
+            </div>
+          </Section>
+
+          <Section number="3" title="Optimization" subtitle="These settings are stored in the workload parameters JSON.">
             <div className="grid gap-4 md:grid-cols-3">
               <Field label="Optimization Goal"><select className={inputCss} value={form.optimizationGoal} onChange={(e) => updateField("optimizationGoal", e.target.value)}><option>Minimize Cost</option><option>Maximize Speed</option><option>Balanced</option><option>Experimental Quantum</option></select></Field>
               <Field label="Execution Mode"><select className={inputCss} value={form.executionMode} onChange={(e) => updateField("executionMode", e.target.value)}><option>Auto (Recommended)</option><option>Classic</option><option>Hybrid</option><option>Quantum</option></select></Field>
               <Field label="Policy"><select className={inputCss} value={form.policyMode} onChange={(e) => updateField("policyMode", e.target.value)}><option>Allow AI Optimization</option><option>Use My Providers</option><option>Manual Review</option></select></Field>
             </div>
           </Section>
-
-          <section className="rounded-2xl border border-blue-300/20 bg-blue-500/10 p-5">
-            <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-blue-100"><Sparkles size={18} /> Saved workload defaults</h2>
-            <p className="text-sm text-slate-300">
-              QEOX will create the workload as <strong>CREATED</strong>, with <strong>{DEFAULT_CONFIG_QUBITS} qubits</strong>, <strong>{DEFAULT_CONFIG_SHOTS} shots</strong>, and <strong>$0.00</strong> cumulative cost until jobs run.
-            </p>
-          </section>
 
           <div className="flex flex-col gap-3 border-t border-blue-200/10 pt-5 sm:flex-row sm:justify-end">
             <Link href="/workloads" className="rounded-xl border border-blue-200/25 px-5 py-3 text-center font-semibold text-slate-200 hover:bg-white/5">Cancel</Link>
@@ -215,24 +141,18 @@ export default function CreateWorkloadPage() {
 
         <aside className="rounded-2xl border border-blue-200/20 bg-[#081426]/85 p-6 shadow-2xl shadow-blue-950/30 lg:sticky lg:top-6 lg:self-start">
           <h2 className="mb-5 flex items-center gap-2 text-lg font-bold text-blue-200"><BrainCircuit size={20} /> AI Recommendation</h2>
-          {loadingRecommendations ? (
-            <div className="flex items-center gap-2 rounded-xl border border-blue-200/15 bg-[#0b1731]/75 p-4 text-sm text-slate-300"><Loader2 className="animate-spin" size={16} /> Loading providers and policies...</div>
-          ) : (
-            <div className="space-y-5 text-sm">
-              <Recommendation icon={<Rocket size={18} />} label="Execution Strategy" value={`${recommendedTier.toUpperCase()} · ${form.executionMode}`} />
-              <Recommendation icon={<CheckCircle2 size={18} />} label="Primary Provider" value={primaryProvider?.provider_name ?? "No active provider configured"} />
-              <Recommendation icon={<Rocket size={18} />} label="Fallback Provider" value={fallbackProvider?.provider_name ?? (policy?.auto_failover ? "Waiting for backup provider" : "Manual fallback")} />
-              <Recommendation icon={<ShieldCheck size={18} />} label="Policy" value={policy ? `${policy.auto_failover ? "Auto-failover" : "Manual review"} · max/job $${Number(policy.max_cost_per_job ?? 0).toFixed(2)}` : form.policyMode} />
-              <div className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-4">
-                <p className="text-slate-200">Recommendation is calculated from active providers, execution policies, selected goal, and workload context.</p>
-                <div className="mt-4 grid grid-cols-3 gap-3 text-center">
-                  <Metric label="Cost" value={`$${estimatedCost.toFixed(2)}`} />
-                  <Metric label="Savings" value={savings} />
-                  <Metric label="Runtime" value={estimatedRuntime} />
-                </div>
+          <div className="space-y-5 text-sm">
+            <Recommendation icon={<Rocket size={18} />} label="Execution Strategy" value="Hybrid optimization with quantum layer" />
+            <Recommendation icon={<CheckCircle2 size={18} />} label="Optimization Goal" value={form.optimizationGoal} />
+            <Recommendation icon={<ShieldCheck size={18} />} label="Policy" value={form.policyMode} />
+            <div className="rounded-xl border border-blue-300/20 bg-blue-500/10 p-4">
+              <p className="text-slate-200">QEOX will save this workload and make it available for execution and job history tracking.</p>
+              <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+                <Metric label="Savings" value="18%" />
+                <Metric label="Runtime" value={estimatedRuntime} />
               </div>
             </div>
-          )}
+          </div>
         </aside>
       </form>
     </main>
@@ -252,5 +172,5 @@ function Recommendation({ icon, label, value }: { icon: React.ReactNode; label: 
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
-  return <div><p className="text-xs text-slate-400">{label}</p><p className="text-lg font-bold text-blue-300">{value}</p></div>;
+  return <div><p className="text-xs text-slate-400">{label}</p><p className="text-xl font-bold text-blue-300">{value}</p></div>;
 }

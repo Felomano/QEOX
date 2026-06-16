@@ -84,14 +84,31 @@ export default function DashboardPage() {
 
         <nav className="flex-1 px-4 pb-6 space-y-4 text-sm">
           <NavSection title="Core" items={[{ href: '/home', icon: LayoutDashboard, label: 'Dashboard' }]} />
-          <NavSection title="Workloads" items={[{ href: '/workloads', icon: Briefcase, label: 'All Workloads' }, { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }, { href: '/workloads/sample-workload', icon: ArrowRight, label: 'Workload Detail' }]} />
-          <NavSection title="Execution" items={[{ href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' }, { href: '/execution/history', icon: History, label: 'Job History' }, { href: '/execution/graph', icon: Network, label: 'Execution Graph' }, { href: '/execution/failover', icon: RefreshCw, label: 'Retry / Failover Monitor' }]} />
+          <NavSection title="Workloads" items={[
+            { href: '/workloads', icon: Briefcase, label: 'All Workloads' },
+            { href: '/workloads/create', icon: PlusCircle, label: 'Create Workload' }
+          ]} />
+          <NavSection title="Execution" items={[
+            { href: '/execution/active', icon: PlayCircle, label: 'Active Jobs' },
+            { href: '/execution/history', icon: History, label: 'Job History' },
+            { href: '/execution/new', icon: Zap, label: 'New Job' }
+          ]} />
           <NavSection title="Discovery" items={[{ href: '/engine', icon: Search, label: 'Engine' }]} />
           <NavSection title="Decision" items={[{ href: '/decide', icon: BarChart2, label: 'Decide' }]} />
-          <NavSection title="Observability" items={[{ href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' }, { href: '/observability/cost-analytics', icon: LineChartIcon, label: 'Cost Analytics' }, { href: '/observability/savings-dashboard', icon: PiggyBank, label: 'Savings Dashboard' }, { href: '/observability/sla-monitoring', icon: ShieldCheck, label: 'SLA Monitoring' }, { href: '/observability/execution-timeline', icon: Timer, label: 'Execution Timeline' }]} />
+          <NavSection title="Observability" items={[
+            { href: '/observability/runtime-metrics', icon: Activity, label: 'Runtime Metrics' },
+            { href: '/observability/cost-analytics', icon: LineChartIcon, label: 'Cost Analytics' }
+          ]} />
           <NavSection title="Policies" items={[{ href: '/settings/policies', icon: ShieldCheck, label: 'Policies' }]} />
-          <NavSection title="Providers" items={[{ href: '/settings/providers', icon: Building2, label: 'All Providers' }, { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Provider' }]} />
-          <NavSection title="Settings" items={[{ href: '/settings/company', icon: Building2, label: 'Company' }, { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' }, { href: '/settings/api-keys', icon: KeyRound, label: 'API Keys' }, { href: '/settings/notifications', icon: Bell, label: 'Notifications' }, { href: '/settings/security', icon: Lock, label: 'Security' }]} />
+          <NavSection title="Providers" items={[
+            { href: '/settings/providers', icon: Building2, label: 'All Providers' },
+            { href: '/settings/providers/create', icon: PlusCircle, label: 'Create Provider' }
+          ]} />
+          <NavSection title="Settings" items={[
+            { href: '/settings/company', icon: Building2, label: 'Company' },
+            { href: '/settings/team-roles', icon: Users, label: 'Team & Roles' },
+            { href: '/settings/integrations', icon: Network, label: 'Integrations' }
+          ]} />
         </nav>
       </aside>
 
@@ -256,7 +273,7 @@ function NavItem({ href, icon: Icon, label, active = false }: any) {
         active ? 'bg-violet-600 text-white shadow-lg shadow-violet-600/20' : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
       }`}>
         <Icon className="w-5 h-5" />
-        <span className={`font-medium ${labelSize}`}>{label}</span>
+        <span className="text-sm font-medium">{label}</span>
       </div>
     </Link>
   )

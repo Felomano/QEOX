@@ -150,16 +150,11 @@ export default function NewExecutionPage() {
         body: JSON.stringify({
           workload_name: workloadName,
           industry,
-          tier: resolvedTier,
+          tier,
           assigned_provider_id: selectedProvider.id,
-          config_qubits: 24,
-          config_shots: 1200,
-          parameters: {
-            description,
-            optimization_goal: optimizationGoal,
-            execution_mode: executionMode,
-            policy_mode: policyMode,
-          },
+          config_qubits: configQubits,
+          config_shots: configShots,
+          parameters: parsedParameters,
           organization_id: organization.id,
         }),
       });

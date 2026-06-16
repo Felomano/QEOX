@@ -93,9 +93,9 @@ export default function WorkloadsPage() {
             <FolderOpen />
           </div>
           <h1 className="text-2xl font-semibold text-blue-200">No workloads yet</h1>
-          <p className="text-slate-300 mt-2">Start your first execution to populate the workload timeline.</p>
+          <p className="text-slate-300 mt-2">Create your first workload to populate the orchestration timeline.</p>
           <Link
-            href="/execution/new"
+            href="/workloads/create"
             className="inline-flex items-center gap-2 mt-6 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 font-semibold"
           >
             <PlusCircle size={16} /> Create first workload
@@ -113,8 +113,8 @@ export default function WorkloadsPage() {
             <h1 className="text-2xl font-semibold text-blue-200">Workloads</h1>
             <p className="text-xs uppercase tracking-wider text-blue-100/70">Realtime orchestration history</p>
           </div>
-          <Link href="/execution/new" className="px-3 py-2 rounded-md bg-violet-600 hover:bg-violet-500 text-sm font-semibold">
-            New execution
+          <Link href="/workloads/create" className="px-3 py-2 rounded-md bg-violet-600 hover:bg-violet-500 text-sm font-semibold">
+            New workload
           </Link>
         </header>
 
@@ -134,8 +134,6 @@ export default function WorkloadsPage() {
             <tbody>
               {workloads.map((workload) => {
                 const activeJobs = (workload.jobs ?? []).filter((job) => ACTIVE_STATUSES.has(job.status)).length;
-                const lastJobId = workload.jobs?.[0]?.id;
-
                 return (
                   <tr key={workload.id} className="border-t border-blue-200/10 hover:bg-blue-500/5">
                     <td className="px-4 py-3 font-medium">{workload.workload_name}</td>
@@ -145,13 +143,9 @@ export default function WorkloadsPage() {
                     <td className="px-4 py-3">{activeJobs}</td>
                     <td className="px-4 py-3">{new Date(workload.created_at).toLocaleString()}</td>
                     <td className="px-4 py-3">
-                      {lastJobId ? (
-                        <Link href={`/execution/${lastJobId}`} className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-100">
-                          View <ArrowRight size={14} />
-                        </Link>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
+                      <Link href={`/workloads/${workload.id}`} className="inline-flex items-center gap-1 text-blue-300 hover:text-blue-100">
+                        Detail <ArrowRight size={14} />
+                      </Link>
                     </td>
                   </tr>
                 );

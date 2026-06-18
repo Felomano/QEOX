@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { ArrowLeft, ArrowRight, BriefcaseBusiness, Clock3, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, BriefcaseBusiness, Clock3, Loader2, Play } from "lucide-react";
+import { toast } from "sonner";
 
 type Job = {
   id: string;
@@ -32,9 +33,11 @@ type Workload = {
 
 export default function WorkloadDetailPage() {
   const supabase = createClient();
+  const router = useRouter();
   const params = useParams<{ id?: string | string[] }>();
   const workloadId = Array.isArray(params.id) ? params.id[0] : params.id;
   const [loading, setLoading] = useState(true);
+  const [launching, setLaunching] = useState(false);
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [activeTab, setActiveTab] = useState<"overview" | "history">("overview");
 
@@ -57,7 +60,7 @@ export default function WorkloadDetailPage() {
       row.jobs = [...(row.jobs ?? [])].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setWorkload(row);
     }
-    setLoading(false);
+    loading && setLoading(false);
   }, [supabase, workloadId]);
 
   useEffect(() => {
@@ -76,6 +79,46 @@ export default function WorkloadDetailPage() {
       supabase.removeChannel(channel);
     };
   }, [loadWorkload, supabase, workloadId]);
+
+  const handleLaunchJob = async () => {
+    if (!workload) return;
+    setLaunching(true);
+
+    try {
+      const response = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workload_id: workload.id,
+          workload_name: workload.workload_name,
+          config_qubits: workload.config_qubits,
+          config_shots: workload.config_shots,
+          parameters: workload.parameters
+        })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || result.error) {
+        setLaunching(false);
+        toast.error(result.error ?? "Failed to initiate optimization job.");
+        return;
+      }
+
+      toast.success("Optimization Job successfully launched into n8n pipeline!");
+      
+      // Extraemos IDs generados por el backend para pasarlos por query params
+      const jobId = result.job?.job_id ?? `job_${Date.now()}`;
+      const correlationId = result.job?.correlation_id ?? "";
+      
+      // Redirección directa a la pantalla de ejecución enviando la metadata
+      router.push(`/execution/new?job_id=${jobId}&correlation_id=${correlationId}&workload_id=${workload.id}`);
+      
+    } catch (err) {
+      setLaunching(false);
+      toast.error("Network error communicating with the orchestration layers.");
+    }
+  };
 
   if (loading) {
     return <main className="flex min-h-screen items-center justify-center bg-[#070b16] text-slate-100"><Loader2 className="animate-spin" /></main>;
@@ -132,10 +175,30 @@ export default function WorkloadDetailPage() {
                   <Info label="Execution mode" value={String(parameters.execution_mode ?? "-")} />
                 </dl>
               </section>
-              <section className="rounded-2xl border border-blue-200/15 bg-blue-500/10 p-5">
-                <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-blue-100"><Clock3 size={20} /> Next step</h2>
-                <p className="text-sm text-slate-300">Use the Jobs History tab to open any execution attached to this workload.</p>
-                <p className="mt-4 rounded-xl bg-[#071224] p-4 text-sm text-slate-300">{String(parameters.description ?? "No description saved for this workload.")}</p>
+              
+              <section className="flex flex-col justify-between rounded-2xl border border-blue-200/15 bg-blue-500/10 p-5">
+                <div>
+                  <h2 className="mb-3 flex items-center gap-2 text-xl font-bold text-blue-100"><Clock3 size={20} /> Next step</h2>
+                  <p className="text-sm text-slate-300">Deploy this model to the orquestrador node to spin up dynamic hardware workloads.</p>
+                  <p className="mt-4 rounded-xl bg-[#071224] p-4 text-sm text-slate-300">{String(parameters.description ?? "No description saved for this workload.")}</p>
+                </div>
+                
+                {/* 🚀 BOTÓN DE LANZAMIENTO INTEGRADO ABAJO */}
+                <button
+                  disabled={launching}
+                  onClick={handleLaunchJob}
+                  className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 font-semibold text-white shadow-lg shadow-blue-700/20 transition hover:bg-blue-500 disabled:opacity-60"
+                >
+                  {launching ? (
+                    <>
+                      <Loader2 className="animate-spin" size={18} /> Deploying Job...
+                    </>
+                  ) : (
+                    <>
+                      <Play size={16} fill="currentColor" /> Launch Optimization Job
+                    </>
+                  )}
+                </button>
               </section>
             </div>
           ) : (
